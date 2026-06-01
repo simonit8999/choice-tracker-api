@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: choice-tracker-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: API_SECRET
+        value: choice_super_secret_key_2025
+      - key: PYTHON_VERSION
+        value: 3.10.0
