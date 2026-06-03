@@ -1,12 +1,22 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
 import sqlite3
 import json
 from datetime import datetime
 import os
 
 app = Flask(__name__)
-CORS(app)
+
+# Ручная обработка CORS
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    return response
+
+@app.route('/api/sync', methods=['OPTIONS'])
+def handle_options():
+    return '', 200
 
 app = Flask(__name__)
 
