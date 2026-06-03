@@ -136,6 +136,24 @@ def get_notifications():
         return jsonify({"status": "ok", "users": users})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+@app.route('/api/check-access/<int:user_id>')
+def check_access(user_id):
+    """Проверяет есть ли у пользователя доступ"""
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('SELECT user_id FROM premium_users WHERE user_id = ?', (user_id,))
+        premium = c.fetchone()
+        c.execute('SELECT user_id FROM basic_users WHERE user_id = ?', (user_id,))
+        basic = c.fetchone()
+        conn.close()
+        
+        return jsonify({
+            "has_access": premium is not None or basic is not None,
+            "plan": "premium" if premium else ("basic" if basic else None)
+        })
+    except Exception as e:
+        return jsonify({"has_access": False, "error": str(e)})
 
 @app.route('/api/stats')
 def global_stats():
