@@ -29,6 +29,8 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS user_progress (user_id INTEGER PRIMARY KEY, current_streak INTEGER DEFAULT 0, best_streak INTEGER DEFAULT 0, total_days INTEGER DEFAULT 0, total_attempts INTEGER DEFAULT 0, achievements TEXT DEFAULT '{}', last_action TEXT, last_update TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS attempts_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, start_date TEXT, end_date TEXT, days_completed INTEGER, end_reason TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS notification_settings (user_id INTEGER PRIMARY KEY, enabled INTEGER DEFAULT 0, reminder_hour INTEGER DEFAULT 20, reminder_minute INTEGER DEFAULT 0, timezone TEXT DEFAULT 'Europe/Moscow')''')
+    c.execute('''CREATE TABLE IF NOT EXISTS premium_users (user_id INTEGER PRIMARY KEY, activated_at TEXT, plan TEXT DEFAULT 'premium')''')
+    c.execute('''CREATE TABLE IF NOT EXISTS basic_users (user_id INTEGER PRIMARY KEY, activated_at TEXT, plan TEXT DEFAULT 'basic')''')
     conn.commit()
     conn.close()
 
