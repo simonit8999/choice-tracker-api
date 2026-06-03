@@ -69,7 +69,6 @@ def sync_data():
                    progress.get('total_days', 0), progress.get('total_attempts', 0),
                    json.dumps(achievements), datetime.now().isoformat()))
         
-        # Настройки уведомлений
         notification = data.get('notification_settings')
         if notification:
             c.execute('''INSERT OR REPLACE INTO notification_settings
@@ -105,10 +104,59 @@ def load_data(user_id):
                 "achievements": json.loads(row['achievements'])
             }
         if notif:
-            if result["data"] is None: result["data"] = {}
-            result["data"]["notification"] = {"enabled": bool(notif['enabled']), "hour": notif['reminder_hour'], "minute": notif['reminder_minute'], "timezone": notif['timezone']}
+            if result["data"] is None:
+                result["data"] = {}
+            result["data"]["notification"] = {
+                "enabled": bool(notif['enabled']),
+                "hour": notif['reminder_hour'],
+                "minute": notif['reminder_minute'],
+                "timezone": notif['timezone']
+            }
         
         return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/notifications')
+def get_notifications():
+    """Отдаёт список пользователей с включёнными уведомлениями"""
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('SELECT user_id, reminder_hour, reminder_minute, timezone FROM notification_settings WHERE enabled = 1')
+        users = []
+        for r in c.fetchall():
+            users.append({
+                "user_id": r['user_id'],
+                "hour": r['reminder_hour'],
+                "minute": r['reminder_minute'],
+                "timezone": r['timezone']
+            })
+        conn.close()
+        return jsonify({"status": "ok", "users": users})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/stats')
+def global_stats():
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('SELECT COUNT(*) as count FROM users')
+        total_users = c.fetchone()['count']
+        c.execute('''SELECT COUNT(*) as active, AVG(best_streak) as avg_best, MAX(best_streak) as max_best, 
+                     AVG(total_days) as avg_days, SUM(total_days) as total_all FROM user_progress''')
+        stats = c.fetchone()
+        conn.close()
+        return jsonify({
+            "status": "ok",
+            "total_users": total_users,
+            "active_users": stats['active'] or 0,
+            "avg_best_streak": round(stats['avg_best'] or 0, 1),
+            "max_streak": stats['max_best'] or 0,
+            "avg_total_days": round(stats['avg_days'] or 0, 1),
+            "total_days_all": stats['total_all'] or 0
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
