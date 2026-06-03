@@ -103,6 +103,17 @@ def sync_data():
                    progress.get('total_attempts', 0),
                    json.dumps(achievements),
                    datetime.now().isoformat()))
+                # Сохраняем настройки уведомлений если есть
+        notification = data.get('notification_settings')
+        if notification:
+            c.execute('''INSERT OR REPLACE INTO notification_settings
+                         (user_id, enabled, reminder_hour, reminder_minute, timezone)
+                         VALUES (?, ?, ?, ?, ?)''',
+                      (user_id,
+                       1 if notification.get('enabled') else 0,
+                       int(notification.get('hour', 20)),
+                       int(notification.get('minute', 0)),
+                       notification.get('timezone', 'Europe/Moscow')))
         
         conn.commit()
         conn.close()
