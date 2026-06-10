@@ -31,6 +31,10 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS notification_settings (user_id INTEGER PRIMARY KEY, enabled INTEGER DEFAULT 0, reminder_hour INTEGER DEFAULT 20, reminder_minute INTEGER DEFAULT 0, timezone TEXT DEFAULT 'Europe/Moscow')''')
     c.execute('''CREATE TABLE IF NOT EXISTS premium_users (user_id INTEGER PRIMARY KEY, activated_at TEXT, plan TEXT DEFAULT 'premium')''')
     c.execute('''CREATE TABLE IF NOT EXISTS basic_users (user_id INTEGER PRIMARY KEY, activated_at TEXT, plan TEXT DEFAULT 'basic')''')
+    c.execute('''CREATE TABLE IF NOT EXISTS customers
+                 (user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT,
+                  purchased_at TEXT, plan TEXT, amount INTEGER, status TEXT,
+                  platega_invoice_id TEXT)''')
     conn.commit()
     conn.close()
 
@@ -180,9 +184,32 @@ def global_stats():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/health')
-def health():
-    return jsonify({"status": "healthy"}), 200
+@app.route('/platega/webhook', methods=['POST'])
+def platega_webhook():
+    """Принимает уведомления об оплате от Platega"""
+    data = request.json
+    invoice_id = data.get('invoice_id') or data.get('id')
+    status = data.get('status')
+    
+    if status == 'paid':
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('SELECT user_id, plan FROM customers WHERE platega_invoice_id = ?', (invoice_id,))
+        row = c.fetchone()
+        
+        if row:
+            user_id, plan = row[0], row[1]
+            if plan == 'premium':
+                c.execute('''INSERT OR REPLACE INTO premium_users (user_id, activated_at, plan) 
+                           VALUES (?, ?, 'premium')''', (user_id, datetime.now().isoformat()))
+            elif plan == 'basic':
+                c.execute('''INSERT OR REPLACE INTO basic_users (user_id, activated_at, plan) 
+                           VALUES (?, ?, 'basic')''', (user_id, datetime.now().isoformat()))
+            c.execute('UPDATE customers SET status = "activated" WHERE platega_invoice_id = ?', (invoice_id,))
+            conn.commit()
+        conn.close()
+    
+    return 'OK', 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
