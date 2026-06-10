@@ -3,6 +3,7 @@ import sqlite3
 import json
 from datetime import datetime
 import os
+import requests as req
 
 app = Flask(__name__)
 
@@ -39,6 +40,10 @@ def init_db():
     conn.close()
 
 init_db()
+
+# Platega настройки
+PLATEGA_MERCHANT_ID = "eacaca79-afbc-43d6-aa0d-474a495e75d3"
+PLATEGA_SECRET_KEY = "3E8QrD5mn6VZkq9r16Xas3spTo0qgGUHAlfRstoaGdH93Nkee5kcuXqEcW6zegAovpo9TanEcH1QZGch68nup0EcBnaPpxo1VwX7"
 
 @app.route('/')
 def home():
@@ -142,6 +147,7 @@ def get_notifications():
         return jsonify({"status": "ok", "users": users})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 @app.route('/api/check-access/<int:user_id>')
 def check_access(user_id):
     """Проверяет есть ли у пользователя доступ"""
@@ -184,6 +190,57 @@ def global_stats():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/create-payment', methods=['POST'])
+def create_payment():
+    """Создаёт платёж через Platega (вызывается ботом)"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        amount = data.get('amount')
+        plan = data.get('plan')
+        
+        payload = {
+            "amount": amount,
+            "currency": "RUB",
+            "order_id": f"{user_id}_{int(datetime.now().timestamp())}",
+            "description": f"CHOICE | {plan}",
+            "url_callback": "https://choice-tracker-api.onrender.com/platega/webhook"
+        }
+        
+        headers = {
+            "X-MerchantId": PLATEGA_MERCHANT_ID,
+            "X-Secret": PLATEGA_SECRET_KEY,
+            "Content-Type": "application/json"
+        }
+        
+        response = req.post(
+            "https://app.platega.io/api/v1/invoice/create",
+            json=payload,
+            headers=headers,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            resp_data = response.json()
+            payment_url = resp_data.get("url") or resp_data.get("payment_url")
+            invoice_id = resp_data.get("id") or resp_data.get("invoice_id")
+            
+            # Сохраняем в БД
+            conn = get_db()
+            c = conn.cursor()
+            c.execute('''INSERT OR REPLACE INTO customers (user_id, username, first_name, purchased_at, plan, amount, status, platega_invoice_id)
+                         VALUES (?, '', '', ?, ?, ?, 'pending', ?)''',
+                      (user_id, datetime.now().isoformat(), plan, amount, invoice_id))
+            conn.commit()
+            conn.close()
+            
+            return jsonify({"status": "ok", "payment_url": payment_url})
+        else:
+            return jsonify({"status": "error", "message": response.text}), 500
+            
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/platega/webhook', methods=['POST'])
 def platega_webhook():
     """Принимает уведомления об оплате от Platega"""
@@ -210,6 +267,10 @@ def platega_webhook():
         conn.close()
     
     return 'OK', 200
+
+@app.route('/health')
+def health():
+    return jsonify({"status": "healthy"}), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
