@@ -246,5 +246,19 @@ def platega_webhook():
 def health():
     return jsonify({"status": "healthy"}), 200
 
+import threading
+import time
+
+def keep_alive_ping():
+    """Пингует бота оплаты каждые 10 минут чтобы не засыпал"""
+    while True:
+        time.sleep(600)  # 10 минут
+        try:
+            req.get('https://choice-payment-bot.onrender.com', timeout=10)
+        except:
+            pass
+
 if __name__ == '__main__':
+    # Запускаем пинг бота в фоне
+    threading.Thread(target=keep_alive_ping, daemon=True).start()
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
