@@ -130,7 +130,6 @@ def load_data(user_id):
 
 @app.route('/api/notifications')
 def get_notifications():
-    """Отдаёт список пользователей с включёнными уведомлениями"""
     try:
         conn = get_db()
         c = conn.cursor()
@@ -167,6 +166,33 @@ def check_access(user_id):
     except Exception as e:
         return jsonify({"has_access": False, "error": str(e)})
 
+@app.route('/api/add-access', methods=['POST'])
+def add_access():
+    """Добавляет доступ пользователю (вызывается ботом оплаты)"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        plan = data.get('plan')
+        secret = data.get('secret')
+        
+        if secret != API_SECRET:
+            return jsonify({"error": "Unauthorized"}), 403
+        
+        conn = get_db()
+        c = conn.cursor()
+        if plan == 'premium':
+            c.execute('INSERT OR REPLACE INTO premium_users (user_id, activated_at, plan) VALUES (?, ?, ?)',
+                      (user_id, datetime.now().isoformat(), 'premium'))
+        elif plan == 'basic':
+            c.execute('INSERT OR REPLACE INTO basic_users (user_id, activated_at, plan) VALUES (?, ?, ?)',
+                      (user_id, datetime.now().isoformat(), 'basic'))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"status": "ok", "message": f"Access added: {plan}"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/stats')
 def global_stats():
     try:
@@ -190,60 +216,8 @@ def global_stats():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/create-payment', methods=['POST'])
-def create_payment():
-    """Создаёт платёж через Platega (вызывается ботом)"""
-    try:
-        data = request.get_json()
-        user_id = data.get('user_id')
-        amount = data.get('amount')
-        plan = data.get('plan')
-        
-        payload = {
-            "amount": amount,
-            "currency": "RUB",
-            "order_id": f"{user_id}_{int(datetime.now().timestamp())}",
-            "description": f"CHOICE | {plan}",
-            "url_callback": "https://choice-tracker-api.onrender.com/platega/webhook"
-        }
-        
-        headers = {
-            "X-MerchantId": PLATEGA_MERCHANT_ID,
-            "X-Secret": PLATEGA_SECRET_KEY,
-            "Content-Type": "application/json"
-        }
-        
-        response = req.post(
-            "https://app.platega.io/api/v1/invoice/create",
-            json=payload,
-            headers=headers,
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            resp_data = response.json()
-            payment_url = resp_data.get("url") or resp_data.get("payment_url")
-            invoice_id = resp_data.get("id") or resp_data.get("invoice_id")
-            
-            # Сохраняем в БД
-            conn = get_db()
-            c = conn.cursor()
-            c.execute('''INSERT OR REPLACE INTO customers (user_id, username, first_name, purchased_at, plan, amount, status, platega_invoice_id)
-                         VALUES (?, '', '', ?, ?, ?, 'pending', ?)''',
-                      (user_id, datetime.now().isoformat(), plan, amount, invoice_id))
-            conn.commit()
-            conn.close()
-            
-            return jsonify({"status": "ok", "payment_url": payment_url})
-        else:
-            return jsonify({"status": "error", "message": response.text}), 500
-            
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
 @app.route('/platega/webhook', methods=['POST'])
 def platega_webhook():
-    """Принимает уведомления об оплате от Platega"""
     data = request.json
     invoice_id = data.get('invoice_id') or data.get('id')
     status = data.get('status')
