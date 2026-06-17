@@ -16,7 +16,7 @@ def after_request(response):
     return response
 
 API_SECRET = os.environ.get('API_SECRET', 'choice_super_secret_key_2025')
-DB_PATH = os.environ.get('DB_PATH', '/tmp/choice_data.db')
+DB_PATH = os.environ.get('DB_PATH', 'choice_data.db')
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
